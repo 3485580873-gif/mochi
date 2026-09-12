@@ -8678,6 +8678,10 @@ if (typeof dataUrl === 'string' && dataUrl.length > 8 * 1024 * 1024) {
 resolve(null);
 return;
 }
+// GIF 动图不压缩，保持动画（与收藏压缩逻辑一致）
+if (/^data:image\/gif/i.test(dataUrl)) { resolve(dataUrl); return; }
+// SVG 矢量图不压缩
+if (/^data:image\/svg/i.test(dataUrl)) { resolve(dataUrl); return; }
 const img = new Image();
 img.onload = () => {
 try {
@@ -8687,14 +8691,25 @@ const w = Math.max(1, Math.round(img.width * scale));
 const h = Math.max(1, Math.round(img.height * scale));
 const c = document.createElement('canvas');
 c.width = w; c.height = h;
-c.getContext('2d').drawImage(img, 0, 0, w, h);
-resolve(c.toDataURL('image/png'));
+const ctx = c.getContext('2d');
+ctx.drawImage(img, 0, 0, w, h);
+// 优先 WebP（压缩率比 PNG 高 5-10 倍），不支持时回退 JPEG 白底
+let out = c.toDataURL('image/webp', 0.82);
+if (out.indexOf('data:image/webp') !== 0) {
+ctx.fillStyle = '#ffffff';
+ctx.fillRect(0, 0, w, h);
+ctx.drawImage(img, 0, 0, w, h);
+out = c.toDataURL('image/jpeg', 0.82);
+}
+// 只在新格式比原来更小时才采用
+resolve(out.length < dataUrl.length ? out : dataUrl);
 } catch (e) { resolve(null); }
 };
 img.onerror = () => resolve(null);
 img.src = dataUrl;
 });
 }
+
 const myeNew = document.getElementById('mye-new');
 if (myeNew) {
 myeNew.addEventListener('click', (e) => {
